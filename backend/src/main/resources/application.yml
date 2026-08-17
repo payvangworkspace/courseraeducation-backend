@@ -1,0 +1,4 @@
+spring:
+  profiles:
+    active: uat
+#    active: uat, prod,salora,payvanguat,payvanglive,
