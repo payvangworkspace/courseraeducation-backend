@@ -1,5 +1,7 @@
 package com.pv.couseae.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.pv.couseae.entities.User;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
@@ -13,6 +15,7 @@ import java.util.Map;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class UserRegistrationModel {
 
     @NotBlank(message = "Email should not be null")
@@ -46,7 +49,9 @@ public class UserRegistrationModel {
 
     //MerchantModel
     private String businessName;
+    @JsonAlias("panSSN")
     private String panSsn;
+    @JsonAlias("gstVAT")
     private String gstVat;
     private String website;
 
@@ -54,4 +59,6 @@ public class UserRegistrationModel {
     private Map<String, String> permissions;
 
     private String businessType;
+    @JsonAlias("subIndustry")
+    private String businessSubType;
 }

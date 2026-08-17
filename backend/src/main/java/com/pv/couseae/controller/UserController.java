@@ -57,28 +57,40 @@ public class UserController {
     }
 
     @PostMapping("/UserCreationViaAdmin")
-    public ResponseEntity<?> createUserViaAdmin(@RequestBody UserRegistrationModel admin) {
-        if (!authUtils.isValidPassowrd(admin.getPassword())) {
+    public ResponseEntity<?> createUserViaAdmin(@RequestBody UserRegistrationModel req) {
+        if (!authUtils.isValidPassowrd(req.getPassword())) {
             log.info("Invalid Password..");
             return ResponseModel.error("Invalid Password. Password should be at least 8 characters long and should contain at least one uppercase letter, one lowercase letter, one digit and one special character.");
         }
-        User user = this.userService.userById(admin.getUserId());
+        User user = this.userService.userById(req.getUserId());
         if (user != null) {
             return ResponseModel.customValidations("User Name", "User name/email already exist");
         }
-        RegExAndValidations.validateEmail(admin.getUserId());
-        RegExAndValidations.validatePhoneNumber(admin.getContactNumber());
+        RegExAndValidations.validateEmail(req.getUserId());
+        RegExAndValidations.validatePhoneNumber(req.getContactNumber());
+
+        String role = req.getRoleId() == null || req.getRoleId().isBlank()
+                ? "MERCHANT"
+                : req.getRoleId().trim().toUpperCase();
+        boolean createAsMerchant = "MERCHANT".equals(role)
+                || (req.getBusinessName() != null && !req.getBusinessName().isBlank());
+
+        if (createAsMerchant) {
+            req.setRoleId("MERCHANT");
+            return persistMerchant(req);
+        }
+
         User newUser = new User();
-        newUser.setUserId(admin.getUserId());
-        newUser.setContactNumber(admin.getContactNumber());
-        newUser.setFullName(admin.getFullName());
-        newUser.setPassword(admin.getPassword());
+        newUser.setUserId(req.getUserId());
+        newUser.setContactNumber(req.getContactNumber());
+        newUser.setFullName(req.getFullName());
+        newUser.setPassword(req.getPassword());
         newUser.setVerified(true);
         newUser.setEmailVerified(true);
         newUser.setContactVerified(true);
-        newUser.setRole(admin.getRoleId());
+        newUser.setRole(role);
         this.userService.createUser(newUser);
-        this.notifications.sendAdminOnboard(newUser);
+        sendOnboardingForRole(newUser);
         return ResponseModel.created("User created successfully...");
     }
 
@@ -124,7 +136,7 @@ public class UserController {
         newUser.setContactVerified(true);
         newUser.setRole("ADMIN");
         this.userService.createUser(newUser);
-        this.notifications.sendAdminOnboard(newUser);
+        sendOnboardingForRole(newUser);
         return ResponseModel.created("Admin created successfully");
     }
 
@@ -151,22 +163,14 @@ public class UserController {
 
         User createdUser = this.userService.createUser(newUser);
 
-        BusinessDetails businessDetails = new BusinessDetails();
-        businessDetails.setBusinessName(merchant.getBusinessName());
-        businessDetails.setPanSsn(merchant.getPanSsn());
-        businessDetails.setGstVat(merchant.getGstVat());
-        businessDetails.setWebsiteUrl(merchant.getWebsite());
-        businessDetails.setUser(createdUser);
-        businessDetails.setBusinessType(merchant.getBusinessType());
-        businessDetails.setBusinessSubType(merchant.getBusinessType());
-        this.userService.addUpdateBusinessDetails(businessDetails);
+        persistBusinessDetails(merchant, createdUser);
 
         // ✅ Invalidate Redis cache so new merchant appears on next fetch
         merchantRedisService.deleteMerchants(CacheKeys.MERCHANTS_MERCHANTMODEL);
         merchantRedisService.deleteMerchants(CacheKeys.MERCHANTS_USERLIST);
         log.info("Redis cache invalidated after new merchant creation: {}", merchant.getUserId());
 
-        this.notifications.sendOnboardingMerchant(newUser);
+        sendOnboardingForRole(createdUser);
         return ResponseModel.created("MerchantModel created successfully");
     }
 
@@ -411,6 +415,66 @@ public class UserController {
         } catch (Exception e) {
             log.error("Failed to build MerchantModel for userId={}: {}", usr.getUserId(), e.getMessage());
             return null;
+        }
+    }
+
+    private ResponseEntity<?> persistMerchant(UserRegistrationModel merchant) {
+        User newUser = new User();
+        newUser.setUserId(merchant.getUserId());
+        newUser.setContactNumber(merchant.getContactNumber());
+        newUser.setFullName(merchant.getFullName());
+        newUser.setPassword(merchant.getPassword());
+        newUser.setRole("MERCHANT");
+        newUser.setBusinessName(merchant.getBusinessName());
+        newUser.setVerified(true);
+        newUser.setEmailVerified(true);
+        newUser.setContactVerified(true);
+        newUser.setPayinEnabled(true);
+
+        User createdUser = this.userService.createUser(newUser);
+        persistBusinessDetails(merchant, createdUser);
+
+        merchantRedisService.deleteMerchants(CacheKeys.MERCHANTS_MERCHANTMODEL);
+        merchantRedisService.deleteMerchants(CacheKeys.MERCHANTS_USERLIST);
+        log.info("Redis cache invalidated after merchant creation: {}", merchant.getUserId());
+
+        sendOnboardingForRole(createdUser);
+        return ResponseModel.created("Merchant created successfully");
+    }
+
+    private void persistBusinessDetails(UserRegistrationModel merchant, User createdUser) {
+        BusinessDetails businessDetails = new BusinessDetails();
+        businessDetails.setBusinessName(merchant.getBusinessName());
+        businessDetails.setPanSsn(merchant.getPanSsn());
+        businessDetails.setGstVat(merchant.getGstVat());
+        businessDetails.setWebsiteUrl(merchant.getWebsite());
+        businessDetails.setUser(createdUser);
+        businessDetails.setBusinessType(merchant.getBusinessType());
+        businessDetails.setBusinessSubType(
+                merchant.getBusinessSubType() != null && !merchant.getBusinessSubType().isBlank()
+                        ? merchant.getBusinessSubType()
+                        : merchant.getBusinessType());
+        businessDetails.setBusinessEmail(merchant.getUserId());
+        businessDetails.setPhone(merchant.getContactNumber());
+        this.userService.addUpdateBusinessDetails(businessDetails);
+    }
+
+    private void sendOnboardingForRole(User created) {
+        try {
+            String role = created.getRole() == null ? "" : created.getRole();
+            if (role.equalsIgnoreCase("MERCHANT")) {
+                this.notifications.sendOnboardingMerchant(created);
+            } else if (role.equalsIgnoreCase("SUBADMIN")) {
+                this.notifications.sendOnboardingSubAdmin(created);
+            } else if (role.equalsIgnoreCase("RESELLER")) {
+                this.notifications.sendOnboardingReseller(created);
+            } else if (role.equalsIgnoreCase("SUBMERCHANT")) {
+                this.notifications.sendOnboardingSubMerchant(created);
+            } else {
+                this.notifications.sendAdminOnboard(created);
+            }
+        } catch (Exception e) {
+            log.warn("Onboarding email skipped for {}: {}", created.getUserId(), e.getMessage());
         }
     }
 

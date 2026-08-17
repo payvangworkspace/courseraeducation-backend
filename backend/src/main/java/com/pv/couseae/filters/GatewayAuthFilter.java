@@ -55,11 +55,11 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String contextPath = request.getContextPath();
-        String uri = request.getRequestURI();
-        String path = uri.substring(contextPath.length());
-        log.info("In GatewayAuthFilter ContextPath={}, URI={}, FinalPath={}",
-                request.getContextPath(), request.getRequestURI(), path);
+        String contextPath = request.getContextPath();     // /payout_service
+        String uri = request.getRequestURI();               // /payout_service/admin/keys/TestIPKey
+
+        String path = uri.substring(contextPath.length()); // /admin/keys/TestIPKey
+        log.info("In GatewayAuthFilter ContextPath={}, URI={}, FinalPath={}",  request.getContextPath(),  request.getRequestURI(), path);
         return uri.equals("/favicon.ico")
                 || uri.startsWith("/swagger-ui")
                 || uri.startsWith("/v3/api-docs")
@@ -73,7 +73,9 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        log.info("GatewayAuthFilter path: {}", request.getRequestURI());
+        String path = request.getRequestURI();
+        log.info("GatewayAuthFilter path: {}", path);
+
 
         if (isAlreadyAuthenticated()) {
             String user = SecurityContextHolder.getContext().getAuthentication().getName();

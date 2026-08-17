@@ -2,9 +2,9 @@ package com.pv.couseae.services;
 
 import com.pv.couseae.entities.User;
 import com.pv.couseae.security.SystemConfigurations;
-import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
+@Slf4j
 @Service
 @AllArgsConstructor
 public class EmailServiceImplement implements EmailServices{
@@ -31,7 +32,8 @@ public class EmailServiceImplement implements EmailServices{
             String htmlContent = templateEngine.process(templateName, context);
             helper.setText(htmlContent, true);
             mailSender.send(mimeMessage);
-        } catch (MessagingException e) {// Handle exception
+        } catch (Exception e) {
+            log.warn("Email template '{}' failed for {}: {}", templateName, to, e.getMessage());
         }
     }
 
@@ -48,7 +50,8 @@ public class EmailServiceImplement implements EmailServices{
             String htmlContent = templateEngine.process(templateName, context);
             helper.setText(htmlContent, true);
             mailSender.send(mimeMessage);
-        } catch (MessagingException e) {// Handle exception
+        } catch (Exception e) {
+            log.warn("Onboarding/email template '{}' failed for {}: {}", templateName, to, e.getMessage());
         }
     }
 
