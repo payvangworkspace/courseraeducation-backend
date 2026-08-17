@@ -4,6 +4,7 @@ package com.pv.couseae.utill;
 import com.pv.couseae.entities.User;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -23,11 +24,22 @@ public class AuthUtils {
         if (authentication == null || !authentication.isAuthenticated()) {
             return "system";
         }
-        if (authentication.getPrincipal().toString().equalsIgnoreCase("anonymousUser")){
+        Object principal = authentication.getPrincipal();
+        if (principal == null || "anonymousUser".equalsIgnoreCase(principal.toString())) {
             return "system";
         }
-        User user = (User) authentication.getPrincipal();
-        return ((User) authentication.getPrincipal()).getUserId();
+        // GatewayAuthFilter JWT path stores the email as a String.
+        // JwtAuthenticationFilter may store UserDetails; older paths store User.
+        if (principal instanceof User user) {
+            return user.getUserId();
+        }
+        if (principal instanceof UserDetails userDetails) {
+            return userDetails.getUsername();
+        }
+        if (principal instanceof String email) {
+            return email;
+        }
+        return principal.toString();
     }
     public static LocalDateTime createdDate(){
         return LocalDateTime.now();

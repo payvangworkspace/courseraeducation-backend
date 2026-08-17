@@ -54,3 +54,8 @@ application-local.yml
 *.jks
 *.pem
 *.key
+
+### Local-only files ###
+logs
+CHANGES.md
+Missing X-Authenticated-User header-cange.md
